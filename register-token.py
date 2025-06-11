@@ -7,9 +7,10 @@ import uuid
 import sys
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
+import qrcode  # type: ignore
 
 
-def register_token(token, mobile_id):
+def register_token(token: bytes, mobile_id: str) -> bytes:
     # We use the PKCS12 certificate directly from the Fortitoken application
     s = requests.Session()
     s.mount(
@@ -93,6 +94,19 @@ def get_mobile_id():
     return p.read_text()
 
 
+def generate_qr_code(otpauth_url):
+    """Generate and display QR code in terminal"""
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=1,
+        border=1,
+    )
+    qr.add_data(otpauth_url)
+    qr.make(fit=True)
+    qr.print_ascii()
+
+
 def main(args):
     if not args.raw_token:
         token = parse_token(args.token)
@@ -105,10 +119,19 @@ def main(args):
         mobile_id = get_mobile_id()
 
     totp = register_token(token, mobile_id)
-    print(
-        f"Token registered: {totp.hex()} (base32: {base64.b32encode(totp).decode('utf-8')})"
-    )
+    base32_secret = base64.b32encode(totp).decode("utf-8")
+    period = 60 if args.fortigate else 30
+    otpauth_url = f"otpauth://totp/FortiToken:Mobile?secret={base32_secret}&issuer=FortiToken&period={period}"
+
+    print(f"Token registered: {totp.hex()} (base32: {base32_secret})")
     print(f"To generate a token now, run: oathtool --totp {totp.hex()}")
+    print()
+    print(otpauth_url)
+
+    if args.qr:
+        print()
+        print("QR Code:")
+        generate_qr_code(otpauth_url)
 
 
 if __name__ == "__main__":
@@ -123,6 +146,17 @@ if __name__ == "__main__":
         "--raw-token",
         action=argparse.BooleanOptionalAction,
         help="Parse the token as raw hexadecimal bytes with no prefix, e.g. 7A2AAEE00A56C569",
+    )
+    parser.add_argument(
+        "-qr",
+        "--qr",
+        action="store_true",
+        help="Generate and display QR code in terminal for easy import into authenticator apps",
+    )
+    parser.add_argument(
+        "--fortigate",
+        action="store_true",
+        help="Use 60-second period for FortiGate compatibility (default: 30 seconds)",
     )
 
     args = parser.parse_args()
