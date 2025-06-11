@@ -1,11 +1,12 @@
-from requests_pkcs12 import Pkcs12Adapter
+from requests_pkcs12 import Pkcs12Adapter  # type: ignore
 import requests
 import argparse
 import base64
 from pathlib import Path
 import uuid
 import sys
-from Crypto.Cipher import AES
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
 
 
 def register_token(token, mobile_id):
@@ -33,7 +34,7 @@ def register_token(token, mobile_id):
         raise Exception("Error from globalftm.fortinet.net")
 
     response = r.json()["d"]
-    if "error" in response and response["error"] != None:
+    if "error" in response and response["error"] is not None:
         print(response["error"], file=sys.stderr)
         raise Exception("Could not register token")
 
@@ -42,21 +43,32 @@ def register_token(token, mobile_id):
 
 
 def decrypt_seed(encrypted_seed, mobile_id):
-    iv = bytes("fortitokenmobile", "utf-8")
-    aes = AES.new(bytes(mobile_id, "utf-8"), AES.MODE_CBC, iv)
-    decrypted = aes.decrypt(base64.b64decode(encrypted_seed))[
-        0:40
-    ]  # Truncate trailing null bytes
-    return bytes.fromhex(decrypted.decode("utf-8"))
+    # IV must be exactly 16 bytes for AES CBC mode
+    iv_string = "fortitokenmobile"
+    iv = iv_string.ljust(16, "\x00").encode("utf-8")  # Pad to exactly 16 bytes
+
+    # Ensure mobile_id is exactly 16 bytes for AES-128
+    key = bytes(mobile_id, "utf-8")
+    if len(key) != 16:
+        # Pad or truncate to 16 bytes
+        key = key[:16].ljust(16, b"\x00")
+
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+    decryptor = cipher.decryptor()
+    decrypted = (
+        decryptor.update(base64.b64decode(encrypted_seed)) + decryptor.finalize()
+    )
+    decrypted_truncated = decrypted[0:40]  # Truncate trailing null bytes
+    return bytes.fromhex(decrypted_truncated.decode("utf-8"))
 
 
 def parse_token(token):
     raw_token = base64.b32decode(token)
-    if raw_token[0:2] != b"\x21\x00":
-        # Example tokens tested all start with \x21\x00, likely a version identifier
-        print("Token did not begin with \x21\x00")
+    if raw_token[0:2] not in [b"\x21\x00", b"\x21\x10"]:
+        # Tokens may start with \x21\x00 or \x21\x10, likely version identifiers
+        print(f"Token did not begin with expected prefix, got: {raw_token[0:2].hex()}")
     if len(raw_token) != 10:
-        print("Token was not 10 bytes")
+        print(f"Token was not 10 bytes, got: {len(raw_token)} bytes")
     return raw_token[2:]
 
 
@@ -75,7 +87,7 @@ def get_mobile_id():
         mobile_id = uuid.uuid4().hex[0:16]
         print(f"Generated new Mobile ID: {mobile_id}")
         print(
-            f"This has been saved to config.txt. Please keep it safe if you want to be able to re-register your token again."
+            "This has been saved to config.txt. Please keep it safe if you want to be able to re-register your token again."
         )
         p.write_text(mobile_id)
     return p.read_text()
