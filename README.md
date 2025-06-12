@@ -13,6 +13,27 @@ To generate a token now, run: oathtool --totp 986f4ba5ea241a9dce10cc14e4c142b248
 otpauth://totp/FortiToken:Mobile?secret=TBXUXJPKEQNJ3TQQZQKOJQKCWJEJTHWZ&issuer=FortiToken&period=30
 ```
 
+Mobile ID Auto-Generation
+--------------------------
+
+If you don't provide a mobile ID with `--mobile-id`, the script will automatically generate one for you:
+
+```bash
+$ python3 register-token.py EEAEVVEYZSERRHEM
+Generated new Mobile ID: a1b2c3d4e5f6g7h8
+This has been saved to config.txt. Please keep it safe if you want to be able to re-register your token again.
+Token registered: 986f4ba5ea241a9dce10cc14e4c142b248999ed9 (base32: TBXUXJPKEQNJ3TQQZQKOJQKCWJEJTHWZ)
+...
+```
+
+The generated mobile ID is:
+
+- **Automatically saved** to `config.txt` for future use
+- **Reused automatically** on subsequent runs (if `config.txt` exists)
+- **Required for re-registration** if you ever need to register the same token again
+
+**Important**: Keep the `config.txt` file safe! If you lose it, you won't be able to re-register the same token with the same mobile ID.
+
 FortiGate Compatibility
 -----------------------
 
@@ -64,6 +85,81 @@ The QR code can be scanned by any authenticator app including:
 - Microsoft Authenticator
 - Authy
 - And many others
+
+Automatic FortiGate Detection
+-----------------------------
+
+The script can automatically detect FortiGate tokens based on their prefix and set the appropriate 60-second period:
+
+```bash
+$ python3 register-token.py EEAEVVEYZSERRHEM
+Auto-detected FortiGate token - using 60-second period
+Token registered: 986f4ba5ea241a9dce10cc14e4c142b248999ed9 (base32: TBXUXJPKEQNJ3TQQZQKOJQKCWJEJTHWZ)
+To generate a token now, run: oathtool --totp 986f4ba5ea241a9dce10cc14e4c142b248999ed9
+
+otpauth://totp/FortiToken:Mobile?secret=TBXUXJPKEQNJ3TQQZQKOJQKCWJEJTHWZ&issuer=FortiToken&period=60
+```
+
+The detection works by analyzing the token prefix:
+
+- `\x21\x00`: Standard FortiToken (30-second period)
+- `\x21\x10`: FortiGate token (60-second period)
+
+You can disable automatic detection if needed:
+
+```bash
+python3 register-token.py EEAEVVEYZSERRHEM --no-auto-detect
+```
+
+Or override it by explicitly using `--fortigate`:
+
+```bash
+python3 register-token.py EEAEVVEYZSERRHEM --fortigate
+```
+
+Verbose Mode
+------------
+
+Use the `--verbose` (or `-v`) flag to see detailed information about the token parsing and registration process:
+
+```bash
+$ python3 register-token.py -v EEAEVVEYZSERRHEM
+INFO: Starting FortiToken registration process
+INFO: Parsing base32 token: EEAEVVEYZSERRHEM
+DEBUG: Raw token bytes: 210010aa15964912211a
+DEBUG: Raw token length: 10 bytes
+DEBUG: Token prefix: 2100
+INFO: Token prefix indicates standard FortiToken format
+DEBUG: Token data (without prefix): 10aa15964912211a
+INFO: Using existing Mobile ID from config.txt: a1b2c3d4e5f6g7h8
+INFO: Registering token with FortiNet servers...
+DEBUG: Token bytes: 10aa15964912211a
+DEBUG: Request payload: {'mobile_id': 'a1b2c3d4e5f6g7h8', '__type': 'SoftToken.MobileProvisionRequest', 'token_activation_code': '10aa15964912211a'}
+DEBUG: Response status code: 200
+INFO: Token registration successful
+DEBUG: Encrypted seed received: [encrypted_data]
+DEBUG: Final TOTP seed: 986f4ba5ea241a9dce10cc14e4c142b248999ed9
+INFO: Using period: 30 seconds (Standard mode)
+Token registered: 986f4ba5ea241a9dce10cc14e4c142b248999ed9 (base32: TBXUXJPKEQNJ3TQQZQKOJQKCWJEJTHWZ)
+...
+```
+
+Verbose mode is helpful for:
+
+- **Debugging token parsing issues**
+- **Understanding the registration process**
+- **Verifying automatic FortiGate detection**
+- **Troubleshooting connection problems**
+
+You can combine verbose mode with other flags:
+
+```bash
+# Verbose with QR code
+python3 register-token.py -v --qr EEAEVVEYZSERRHEM
+
+# Verbose with manual FortiGate mode
+python3 register-token.py -v --fortigate EEAEVVEYZSERRHEM
+```
 
 Installation
 ------------
