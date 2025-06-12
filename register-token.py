@@ -250,6 +250,7 @@ def main(args):
     print(f"Token registered: {totp.hex()} (base32: {base32_secret})")
     print(f"To generate a token now, run: oathtool --totp {totp.hex()}")
     print()
+    print("Import URL for authenticator apps:")
     print(otpauth_url)
 
     if args.qr:
