@@ -167,4 +167,3 @@ References
 ----------
 
 <https://web.archive.org/web/20240525172251/https://jonstoler.me/blog/extracting-fortitoken-mobile-totp-secret>
-
